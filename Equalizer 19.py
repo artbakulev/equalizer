@@ -594,7 +594,7 @@ class Main_Window_class(QDialog):
             5: self.old_value_sld6
         }
         old_value = old_values[pos]
-        
+        print(old_value)
         if pos == 0:
             self.old_value_sld1 = value
         elif pos == 1:
@@ -634,26 +634,27 @@ class Main_Window_class(QDialog):
         
         
     def draw_array(self, arr, spectrum_or_channel):
-        if (spectrum_or_channel == 0):
-            self.figure_2.clear()
-            self.ax_2 = self.figure_2.add_subplot(1, 1, 1)
-            self.ax_2.set_xlabel('Частота, Гц')
-            self.figure_2.align_xlabels()
-            self.ax_2.set_ylabel('Амплитуда')
-            self.figure_2.align_ylabels()
-            self.ax_2.plot(np.fft.rfftfreq(self.nframes, 1./ self.framerate)[::self.koeff],
-                       np.abs(arr[0][::self.koeff]) / self.nframes)
-            self.canvas_2.draw()
-            
-        else:
-            self.figure_4.clear()
-            self.ax_4 = self.figure_4.add_subplot(1, 1, 1)
-            self.ax_4.set_xlabel('Время, с')
-            self.figure_4.align_xlabels()
-            self.ax_4.set_ylabel('Амплитуда')
-            self.figure_4.align_ylabels()
-            self.ax_4.plot(arr[0][::self.koeff])
-            self.canvas_4.draw()
+        pass
+        # if (spectrum_or_channel == 0):
+        #     self.figure_2.clear()
+        #     self.ax_2 = self.figure_2.add_subplot(1, 1, 1)
+        #     self.ax_2.set_xlabel('Частота, Гц')
+        #     self.figure_2.align_xlabels()
+        #     self.ax_2.set_ylabel('Амплитуда')
+        #     self.figure_2.align_ylabels()
+        #     self.ax_2.plot(np.fft.rfftfreq(self.nframes, 1./ self.framerate)[::self.koeff],
+        #                np.abs(arr[0][::self.koeff]) / self.nframes)
+        #     self.canvas_2.draw()
+        #
+        # else:
+        #     self.figure_4.clear()
+        #     self.ax_4 = self.figure_4.add_subplot(1, 1, 1)
+        #     self.ax_4.set_xlabel('Время, с')
+        #     self.figure_4.align_xlabels()
+        #     self.ax_4.set_ylabel('Амплитуда')
+        #     self.figure_4.align_ylabels()
+        #     self.ax_4.plot(arr[0][::self.koeff])
+        #     self.canvas_4.draw()
     
     
     def doing_kliping(self, channels):
