@@ -1,3 +1,5 @@
+.idea/
+*__pycache__*
 Блок схема.xml
 РПЗ.docx
 LICENSE
