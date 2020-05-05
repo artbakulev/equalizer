@@ -210,10 +210,10 @@ class Main_Window_class(QDialog):
         self.stop_button.clicked.connect(self.button_clicked_listener)
 
     def create_graphics(self):
-        self.create_labels()
         self.create_lcd_numbers()
         self.create_sliders()
         self.create_bands()
+        self.create_labels()
         self.create_checkboxes()
         self.create_buttons()
 
