@@ -7,3 +7,8 @@ https://stackoverflow.com/questions/21887862/python-chorus-effect-and-meaning-of
 http://websound.ru/articles/sound-processing/effects.htm
 http://www.auditionrich.com/lessons/kak-v-adobe-audition-ispolzovat-effekt-envelope-follower.html
 https://works.doklad.ru/view/M_cHUqES_HE/2.html
+
+
+
+1. Cэмпл - последовательность бит, описывающая амплитуду волны в момент времени
+2. Фрейм - последовательность сэмплов для всех каналов в определенный момент

@@ -31,14 +31,13 @@ class Main_Window_class(QDialog):
 
     def __init__(self):
         super().__init__()
-        self.sld_step = 1
-        self.sld_def = 0
-        self.sld_max = 50
-        self.sld_min = -50
-        self.app_name = 'Эквалайзер'
-        self.buttons_labels = ['Воспроизвести', 'Пауза', 'Остановить']
-        self.checkboxes_labels = ['Клиппинг', 'Энвелоп']
         self.nlabels = 6
+
+        self.slider_step = 1
+        self.slider_default = 0
+        self.slider_max = 50
+        self.slider_min = -50
+
         self.music_is_playing = False
         self.threadpool = QThreadPool()
         self.nchannels = None  # number of channels
@@ -48,82 +47,97 @@ class Main_Window_class(QDialog):
         self.comptype = None  # compression type
         self.compname = None  # compression type name
         self.elem_per_hertz = None
-        self.coefficient = 1000  # коэффициент прореживания
+        self.coefficient = 1000  # коэффициент прореживания, для уменьшения частоты дискретизации
         self.buffer_size = None
         self.buffer_cnt = 0
         self.music_worker = None
-        self.checkbox1_worker = None
-        self.checkbox2_worker = None
         self.min_freq = 0
         self.max_freq = None
 
         self.channels = []
         self.spectrum = None
+
         self.spectrum_original = None
-        self.spectrum_clipping = None
-        self.spectrum_envelop = None
         self.channels_original = []
+
+        self.spectrum_clipping = None
         self.channels_clipping = []
+
+        self.spectrum_envelop = None
         self.channels_envelop = []
 
+        self.app_name = 'Эквалайзер'
+        self.buttons_labels = ['Воспроизвести', 'Пауза', 'Остановить']
+        self.checkboxes_labels = ['Клиппинг', 'Энвелоп']
         self.bands = [[], []]
         self.labels = []
         self.ui_labels = []
         self.sliders = []
         self.sliders_workers = [None for _ in range(self.nlabels)]
-        self.sliders_old_values = [self.sld_def for _ in range(self.nlabels)]
+        self.sliders_old_values = [self.slider_default for _ in range(self.nlabels)]
         self.LCD_numbers = []
         self.canvases = []
         self.effects_checkboxes = []
+        self.effects_checkboxes_workers = []
         self.play_button, self.stop_button, self.pause_button = None, None, None
         self.redraw_mutex = threading.Lock()
-        self.run()
 
-    def run(self):
+        self.run_ui()
+
+    def run_ui(self):
         self.pull_music()
-        self.create_bands()
-        self.create_labels()
-        self.create_lcd_numbers()
-        self.create_sliders()
-        self.create_checkboxes()
-        self.create_buttons()
-        self.create_graphics()
         self.create_interface()
 
     def pull_music(self):
         path_to_pull = QFileDialog.getOpenFileName(self, 'Выберите .wav файл')[0]
         wav = wave.open(path_to_pull, mode='r')
 
+        # nchannels - число каналов .wav файла
+        # sampwidth - число байт на сэмпл
+        # framerate - число фреймов в секунду
+        # nframes - общее число фреймов
+        # comptype - тип сжатия
+        # compname - имя типа сжатия
         (self.nchannels, self.sampwidth,
          self.framerate, self.nframes,
          self.comptype, self.compname) = wav.getparams()
 
+        # Теорема Котельникова, в дискретном сигнале представлены частоты от нуля до framerate // 2
         self.max_freq = self.framerate // 2
         self.buffer_size = self.framerate
 
+        # считываем все фреймы
         content = wav.readframes(self.nframes)
+
+        # и сохраняем в массив с нужным типом элемента
         samples = np.fromstring(content, dtype=IntTypes.types[self.sampwidth])
 
+        # разбиваем на каналы, например, \xe2\xff\xe3\xfа — это фрейм 16-битного wav-файла. Значит, \xe2\xff — сэмпл
+        # первого (левого) канала, а \xe3\xfа
         for i in range(self.nchannels):
             self.channels.append(samples[i::self.nchannels])
 
+        # сохраняем оригинальные каналы
         self.channels_original = self.channels.copy()
 
-        self.checkbox1_worker = Worker(self.doing_clipping, self.channels)
-        self.threadpool.start(self.checkbox1_worker)
+        # создаем worker'ов, который создадут измененные дорожки с примененными эффектами
+        for i in range(self.EFFECTS_NUMBER):
+            worker = Worker(self.doing_clipping, self.channels)
+            self.effects_checkboxes_workers.append(worker)
+            self.threadpool.start(worker)
 
-        self.checkbox2_worker = Worker(self.doing_envelop, self.channels)
-        self.threadpool.start(self.checkbox2_worker)
-
+        # Выполняем быстрое дискретное преобразование Фурье, для получения спектра
         self.spectrum = np.fft.rfft(self.channels_original)
         self.spectrum_original = self.spectrum.copy()
 
+        # запускаем pygame
         pygame.mixer.pre_init(frequency=self.framerate,
                               size=-8 * self.sampwidth,
                               channels=self.nchannels)
         pygame.init()
 
     def create_bands(self):
+        """Создает подписи к слайдерам"""
         step = (self.max_freq - self.min_freq) // 2 ** self.nlabels
 
         self.bands[0].append(self.min_freq)
@@ -137,7 +151,7 @@ class Main_Window_class(QDialog):
         self.bands[1].append(self.max_freq)
 
         for i in range(self.nlabels):
-            self.labels.append(str(self.bands[0][i]) + ' - ' + str(self.bands[1][i]))
+            self.labels.append(f'{self.bands[0][i]} - {str(self.bands[1][i])}')
 
     def create_labels(self):
         for label in self.labels:
@@ -150,12 +164,12 @@ class Main_Window_class(QDialog):
     def create_sliders(self):
         for i in range(self.nlabels):
             slider = QSlider(Qt.Vertical, self)
-            slider.setMinimum(self.sld_min)
-            slider.setMaximum(self.sld_max)
-            slider.setValue(self.sld_def)
+            slider.setMinimum(self.slider_min)
+            slider.setMaximum(self.slider_max)
+            slider.setValue(self.slider_default)
             slider.setFocusPolicy(Qt.StrongFocus)
             slider.setTickPosition(QSlider.TicksBothSides)
-            slider.setSingleStep(self.sld_step)
+            slider.setSingleStep(self.slider_step)
             slider.valueChanged[int].connect(self.slider_change_value)
             slider.valueChanged[int].connect(self.LCD_numbers[i].display)
             self.sliders.append(slider)
@@ -172,11 +186,18 @@ class Main_Window_class(QDialog):
         self.pause_button = QPushButton(self.buttons_labels[1], self)
         self.stop_button = QPushButton(self.buttons_labels[2], self)
 
-        self.play_button.clicked.connect(self.button_clicked)
-        self.pause_button.clicked.connect(self.button_clicked)
-        self.stop_button.clicked.connect(self.button_clicked)
+        self.play_button.clicked.connect(self.button_clicked_listener)
+        self.pause_button.clicked.connect(self.button_clicked_listener)
+        self.stop_button.clicked.connect(self.button_clicked_listener)
 
     def create_graphics(self):
+        self.create_labels()
+        self.create_lcd_numbers()
+        self.create_sliders()
+        self.create_bands()
+        self.create_checkboxes()
+        self.create_buttons()
+
         self.elem_per_hertz = self.spectrum.shape[1] // (self.max_freq - self.min_freq)
         plots_labels = [('Частота, Гц', 'Амплитуда'), ('Частота, Гц', 'Амплитуда'), ('Время, с', 'Амплитуда')]
         plots_sources = [(self.channels[0][::self.coefficient],),
@@ -204,6 +225,7 @@ class Main_Window_class(QDialog):
             canvas['canvas'].draw()
 
     def create_interface(self):
+        self.create_graphics()
         labels_box = QHBoxLayout()
         for label in self.ui_labels:
             labels_box.addWidget(label)
@@ -278,7 +300,7 @@ class Main_Window_class(QDialog):
                 self.spectrum = self.spectrum_original.copy()
 
         for slider in self.sliders:
-            slider.setValue(self.sld_def)
+            slider.setValue(self.slider_default)
 
         draw_1 = Worker(self.draw_array, self.spectrum, 0)
         self.threadpool.start(draw_1)
@@ -286,7 +308,7 @@ class Main_Window_class(QDialog):
         draw_2 = Worker(self.draw_array, self.channels, 1)
         self.threadpool.start(draw_2)
 
-    def button_clicked(self):
+    def button_clicked_listener(self):
         if self.sender() == self.play_button:
             # Запустить
             if not self.music_is_playing:
@@ -303,28 +325,26 @@ class Main_Window_class(QDialog):
             # Остановить
             if self.music_is_playing:
                 self.music_is_playing = False
-                self.threadpool.clear()
 
-            sliders = self.sliders_workers
-            for slider in sliders:
-                self.sld_stop(slider)
-
-            self.buffer_cnt = 0
+            self.threadpool.clear()
 
             for slider in self.sliders:
-                slider.setValue(self.sld_def)
+                worker = Worker(self.music_edit, self.sliders.index(slider), self.slider_default)
+                self.sliders_workers.append(worker)
+                self.threadpool.start(worker)
+
+            self.threadpool.start(Worker(self.wait_until_sliders_launched))
+
+            for slider in self.sliders:
+                slider.setValue(self.slider_default)
+
+            self.buffer_cnt = 0
 
             for i in range(self.EFFECTS_NUMBER):
                 self.effects_checkboxes[i].setChecked(False)
 
-            self.threadpool.start(Worker(self.graceful_shutdown))
-
-    def sld_stop(self, slider):
-        slider = Worker(self.music_edit, self.sliders.index(slider), self.sld_def)
-        self.threadpool.start(slider)
-
-    def graceful_shutdown(self):
-        while self.threadpool.activeThreadCount() != 1:
+    def wait_until_sliders_launched(self):
+        while self.threadpool.activeThreadCount() != len(self.sliders):
             sleep(0.1)
         self.channels = self.channels_original.copy()
         self.spectrum = self.spectrum_original.copy()
@@ -380,6 +400,7 @@ class Main_Window_class(QDialog):
 
     def music_edit(self, pos, value):
         old_value = self.sliders_old_values[pos]
+        print(old_value)
         self.sliders_old_values[pos] = value
 
         if old_value == value:
@@ -407,6 +428,7 @@ class Main_Window_class(QDialog):
         self.threadpool.start(draw_2)
 
     def redraw_subplot(self, canvas: dict, left, right=None):
+        # потоконебезопасная функция, нужен mutex
         self.redraw_mutex.acquire()
         canvas['figure'].clear()
         subplot = canvas['figure'].add_subplot(1, 1, 1)
