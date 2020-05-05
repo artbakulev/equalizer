@@ -27,7 +27,7 @@ class IntTypes:
 
 class Main_Window_class(QDialog):
     PLOTS_NUMBER = 3
-    EFFECTS_NUMBER = 4
+    EFFECTS_NUMBER = 2
 
     def __init__(self):
         super().__init__()
@@ -92,9 +92,8 @@ class Main_Window_class(QDialog):
         self.sliders_old_values = [self.slider_default for _ in range(self.nlabels)]
         self.LCD_numbers = []
         self.canvases = []
-        self.effects = [self.doing_hard_clipping, self.doing_envelop, self.doing_echo, self.doing_soft_clipping]
-        self.effects_checkboxes_labels = ['Жесткий клиппинг (дисторшн)', 'Энвелоп',
-                                          'Эхо', 'Мягкий клиппинг (овердрайв)']
+        self.effects = [self.doing_echo, self.doing_soft_clipping]
+        self.effects_checkboxes_labels = ['Эхо', 'Мягкий клиппинг (овердрайв)']
         self.effects_checkboxes = []
         self.effects_checkboxes_workers = []
         self.play_button, self.stop_button, self.pause_button = None, None, None
@@ -303,10 +302,8 @@ class Main_Window_class(QDialog):
         if self.sender() == self.effects_checkboxes[0]:
             if state == Qt.Checked:
                 self.effects_checkboxes[1].setChecked(False)
-                self.effects_checkboxes[2].setChecked(False)
-                self.effects_checkboxes[3].setChecked(False)
-                self.channels = self.channels_hard_clipping.copy()
-                self.spectrum = self.spectrum_hard_clipping.copy()
+                self.channels = self.channels_echo.copy()
+                self.spectrum = self.spectrum_echo.copy()
             else:
                 self.channels = self.channels_original.copy()
                 self.spectrum = self.spectrum_original.copy()
@@ -314,30 +311,6 @@ class Main_Window_class(QDialog):
         elif self.sender() == self.effects_checkboxes[1]:
             if state == Qt.Checked:
                 self.effects_checkboxes[0].setChecked(False)
-                self.effects_checkboxes[2].setChecked(False)
-                self.effects_checkboxes[3].setChecked(False)
-                self.channels = self.channels_envelop.copy()
-                self.spectrum = self.spectrum_envelop.copy()
-            else:
-                self.channels = self.channels_original.copy()
-                self.spectrum = self.spectrum_original.copy()
-
-        elif self.sender() == self.effects_checkboxes[2]:
-            if state == Qt.Checked:
-                self.effects_checkboxes[0].setChecked(False)
-                self.effects_checkboxes[1].setChecked(False)
-                self.effects_checkboxes[3].setChecked(False)
-                self.channels = self.channels_echo.copy()
-                self.spectrum = self.spectrum_echo.copy()
-            else:
-                self.channels = self.channels_original.copy()
-                self.spectrum = self.spectrum_original.copy()
-
-        elif self.sender() == self.effects_checkboxes[3]:
-            if state == Qt.Checked:
-                self.effects_checkboxes[0].setChecked(False)
-                self.effects_checkboxes[1].setChecked(False)
-                self.effects_checkboxes[2].setChecked(False)
                 self.channels = self.channels_soft_clipping.copy()
                 self.spectrum = self.spectrum_soft_clipping.copy()
             else:
