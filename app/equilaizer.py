@@ -27,7 +27,7 @@ class IntTypes:
 
 class Main_Window_class(QDialog):
     PLOTS_NUMBER = 3
-    EFFECTS_NUMBER = 2
+    EFFECTS_NUMBER = 4
 
     def __init__(self):
         super().__init__()
@@ -37,6 +37,16 @@ class Main_Window_class(QDialog):
         self.slider_default = 0
         self.slider_max = 50
         self.slider_min = -50
+
+        # Коэффициент ослабления эхо эффекта
+        self.echo_coefficient = 1
+        # Задержка в фреймах
+        self.echo_shift = 1000
+
+        # "Жесткий" предел овердрайва за которым волна обрезается
+        self.soft_clipping_hard_limit = 14000
+        # "Мягкий" предел овердрайва за которым волна сглаживается
+        self.soft_clipping_linear_limit = 12000  # -3 dB
 
         self.music_is_playing = False
         self.threadpool = QThreadPool()
@@ -60,15 +70,20 @@ class Main_Window_class(QDialog):
         self.spectrum_original = None
         self.channels_original = []
 
-        self.spectrum_clipping = None
-        self.channels_clipping = []
+        self.spectrum_hard_clipping = None
+        self.channels_hard_clipping = []
+
+        self.spectrum_soft_clipping = None
+        self.channels_soft_clipping = None
 
         self.spectrum_envelop = None
         self.channels_envelop = []
 
+        self.spectrum_echo = None
+        self.channels_echo = []
+
         self.app_name = 'Эквалайзер'
         self.buttons_labels = ['Воспроизвести', 'Пауза', 'Остановить']
-        self.checkboxes_labels = ['Клиппинг', 'Энвелоп']
         self.bands = [[], []]
         self.labels = []
         self.ui_labels = []
@@ -77,6 +92,9 @@ class Main_Window_class(QDialog):
         self.sliders_old_values = [self.slider_default for _ in range(self.nlabels)]
         self.LCD_numbers = []
         self.canvases = []
+        self.effects = [self.doing_hard_clipping, self.doing_envelop, self.doing_echo, self.doing_soft_clipping]
+        self.effects_checkboxes_labels = ['Жесткий клиппинг (дисторшн)', 'Энвелоп',
+                                          'Эхо', 'Мягкий клиппинг (овердрайв)']
         self.effects_checkboxes = []
         self.effects_checkboxes_workers = []
         self.play_button, self.stop_button, self.pause_button = None, None, None
@@ -121,8 +139,9 @@ class Main_Window_class(QDialog):
         self.channels_original = self.channels.copy()
 
         # создаем worker'ов, который создадут измененные дорожки с примененными эффектами
+
         for i in range(self.EFFECTS_NUMBER):
-            worker = Worker(self.doing_clipping, self.channels)
+            worker = Worker(self.effects[i], self.channels)
             self.effects_checkboxes_workers.append(worker)
             self.threadpool.start(worker)
 
@@ -176,9 +195,9 @@ class Main_Window_class(QDialog):
 
     def create_checkboxes(self):
         for i in range(self.EFFECTS_NUMBER):
-            checkbox = QCheckBox(self.checkboxes_labels[i], self)
+            checkbox = QCheckBox(self.effects_checkboxes_labels[i], self)
             checkbox.setChecked(False)
-            checkbox.stateChanged.connect(self.checkbox_clicked)
+            checkbox.stateChanged.connect(self.checkbox_clicked_listener)
             self.effects_checkboxes.append(checkbox)
 
     def create_buttons(self):
@@ -280,21 +299,47 @@ class Main_Window_class(QDialog):
                 self.sliders_workers[i] = Worker(self.music_edit, i, value)
                 self.threadpool.start(self.sliders_workers[i])
 
-    def checkbox_clicked(self, state):
+    def checkbox_clicked_listener(self, state):
         if self.sender() == self.effects_checkboxes[0]:
             if state == Qt.Checked:
                 self.effects_checkboxes[1].setChecked(False)
-                self.channels = self.channels_clipping.copy()
-                self.spectrum = self.spectrum_clipping.copy()
+                self.effects_checkboxes[2].setChecked(False)
+                self.effects_checkboxes[3].setChecked(False)
+                self.channels = self.channels_hard_clipping.copy()
+                self.spectrum = self.spectrum_hard_clipping.copy()
             else:
                 self.channels = self.channels_original.copy()
                 self.spectrum = self.spectrum_original.copy()
 
-        else:
+        elif self.sender() == self.effects_checkboxes[1]:
             if state == Qt.Checked:
                 self.effects_checkboxes[0].setChecked(False)
+                self.effects_checkboxes[2].setChecked(False)
+                self.effects_checkboxes[3].setChecked(False)
                 self.channels = self.channels_envelop.copy()
                 self.spectrum = self.spectrum_envelop.copy()
+            else:
+                self.channels = self.channels_original.copy()
+                self.spectrum = self.spectrum_original.copy()
+
+        elif self.sender() == self.effects_checkboxes[2]:
+            if state == Qt.Checked:
+                self.effects_checkboxes[0].setChecked(False)
+                self.effects_checkboxes[1].setChecked(False)
+                self.effects_checkboxes[3].setChecked(False)
+                self.channels = self.channels_echo.copy()
+                self.spectrum = self.spectrum_echo.copy()
+            else:
+                self.channels = self.channels_original.copy()
+                self.spectrum = self.spectrum_original.copy()
+
+        elif self.sender() == self.effects_checkboxes[3]:
+            if state == Qt.Checked:
+                self.effects_checkboxes[0].setChecked(False)
+                self.effects_checkboxes[1].setChecked(False)
+                self.effects_checkboxes[2].setChecked(False)
+                self.channels = self.channels_soft_clipping.copy()
+                self.spectrum = self.spectrum_soft_clipping.copy()
             else:
                 self.channels = self.channels_original.copy()
                 self.spectrum = self.spectrum_original.copy()
@@ -400,7 +445,6 @@ class Main_Window_class(QDialog):
 
     def music_edit(self, pos, value):
         old_value = self.sliders_old_values[pos]
-        print(old_value)
         self.sliders_old_values[pos] = value
 
         if old_value == value:
@@ -451,22 +495,56 @@ class Main_Window_class(QDialog):
         else:
             self.redraw_subplot(self.canvases[0], arr[0][::self.coefficient])
 
-    def doing_clipping(self, channels):
+    def doing_hard_clipping(self, channels):
         threshold_max = int(0.6 * np.max(channels[0]))
         threshold_min = int(0.6 * np.min(channels[0]))
 
-        self.channels_clipping = np.maximum(np.minimum(channels, threshold_max),
-                                            threshold_min).astype(IntTypes.types[self.sampwidth])
-        self.spectrum_clipping = np.fft.rfft(self.channels_clipping)
+        self.channels_hard_clipping = np.maximum(np.minimum(channels, threshold_max),
+                                                 threshold_min).astype(IntTypes.types[self.sampwidth])
+        self.spectrum_hard_clipping = np.fft.rfft(self.channels_hard_clipping)
+
+    def doing_soft_clipping(self, channels):
+        clip_limit = self.soft_clipping_linear_limit + int(pi / 2 * (self.soft_clipping_hard_limit -
+                                                                     self.soft_clipping_linear_limit))
+        scale = self.soft_clipping_hard_limit - self.soft_clipping_linear_limit
+
+        tmp_channels = np.array(channels, copy=True)
+        for i in range(len(tmp_channels)):
+            for j in range(len(tmp_channels[i])):
+                n = tmp_channels[i][j]
+                amplitude, sign = abs(n), 1 if n >= 0 else -1
+                if amplitude <= self.soft_clipping_linear_limit:
+                    tmp_channels[i][j] = n
+                    continue
+                if amplitude >= clip_limit:
+                    tmp_channels[i][j] = self.soft_clipping_hard_limit * sign
+                    continue
+                compression = scale * sin(float(amplitude - self.soft_clipping_linear_limit) / scale)
+                tmp_channels[i][j] = (self.soft_clipping_linear_limit + int(compression)) * sign
+
+        self.channels_soft_clipping = tmp_channels
+        self.spectrum_soft_clipping = np.fft.rfft(self.channels_soft_clipping)
 
     def doing_envelop(self, channels):
         frequency = 1 / 15
         envelope_sig = np.array([abs(sin(2 * pi * frequency * t / self.framerate))
                                  for t in range(self.nframes)])
-        tmp_channels = channels.copy()
+        tmp_channels = np.array(channels, copy=True)
 
         for i in range(self.nchannels):
             tmp_channels[i] = (tmp_channels[i] * envelope_sig).astype(IntTypes.types[self.sampwidth])
 
-        self.channels_envelop = tmp_channels.copy()
+        self.channels_envelop = tmp_channels
         self.spectrum_envelop = np.fft.rfft(self.channels_envelop)
+
+    def doing_echo(self, channels):
+        tmp_channels = np.array(channels, copy=True)
+        echo_channels = tmp_channels.copy()
+        for i in range(len(tmp_channels)):
+            echo_channels[i] = (echo_channels[i] * self.echo_coefficient).astype(IntTypes.types[self.sampwidth])
+            echo_channels[i] = np.append(echo_channels[i][self.echo_shift:], np.zeros(self.echo_shift)).astype(
+                IntTypes.types[self.sampwidth])
+            tmp_channels[i] += echo_channels[i]
+
+        self.channels_echo = tmp_channels
+        self.spectrum_echo = np.fft.rfft(self.channels_echo)
