@@ -468,14 +468,6 @@ class Main_Window_class(QDialog):
         else:
             self.redraw_subplot(self.canvases[0], arr[0][::self.coefficient])
 
-    def doing_hard_clipping(self, channels):
-        threshold_max = int(0.6 * np.max(channels[0]))
-        threshold_min = int(0.6 * np.min(channels[0]))
-
-        self.channels_hard_clipping = np.maximum(np.minimum(channels, threshold_max),
-                                                 threshold_min).astype(IntTypes.types[self.sampwidth])
-        self.spectrum_hard_clipping = np.fft.rfft(self.channels_hard_clipping)
-
     def doing_soft_clipping(self, channels):
         clip_limit = self.soft_clipping_linear_limit + int(pi / 2 * (self.soft_clipping_hard_limit -
                                                                      self.soft_clipping_linear_limit))
@@ -497,18 +489,6 @@ class Main_Window_class(QDialog):
 
         self.channels_soft_clipping = tmp_channels
         self.spectrum_soft_clipping = np.fft.rfft(self.channels_soft_clipping)
-
-    def doing_envelop(self, channels):
-        frequency = 1 / 15
-        envelope_sig = np.array([abs(sin(2 * pi * frequency * t / self.framerate))
-                                 for t in range(self.nframes)])
-        tmp_channels = np.array(channels, copy=True)
-
-        for i in range(self.nchannels):
-            tmp_channels[i] = (tmp_channels[i] * envelope_sig).astype(IntTypes.types[self.sampwidth])
-
-        self.channels_envelop = tmp_channels
-        self.spectrum_envelop = np.fft.rfft(self.channels_envelop)
 
     def doing_echo(self, channels):
         tmp_channels = np.array(channels, copy=True)
