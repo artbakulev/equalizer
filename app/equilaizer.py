@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
+from scipy.signal import cheby1, filtfilt
 from app.Worker import Worker
 
 
@@ -32,6 +33,15 @@ class Main_Window_class(QDialog):
     def __init__(self):
         super().__init__()
         self.nlabels = 6
+
+        self.filter_order = 10
+
+        # показатель пульсаций определяет амплитуду пульсаций
+        self.riple_factor = 0.5
+
+        # Wn is a fraction of the Nyquist frequency (half the sampling frequency). So if the sampling rate is 1000Hz
+        # and you want a cutoff of 250Hz, you should use Wn=0.5.
+        self.Wn = 0.5
 
         self.slider_step = 1
         self.slider_default = 0
@@ -136,9 +146,9 @@ class Main_Window_class(QDialog):
 
         # сохраняем оригинальные каналы
         self.channels_original = self.channels.copy()
+        # self.channels = self.cheby1_filtration(self.channels)
 
         # создаем worker'ов, который создадут измененные дорожки с примененными эффектами
-
         for i in range(self.EFFECTS_NUMBER):
             worker = Worker(self.effects[i], self.channels)
             self.effects_checkboxes_workers.append(worker)
@@ -366,6 +376,12 @@ class Main_Window_class(QDialog):
             sleep(0.1)
         self.channels = self.channels_original.copy()
         self.spectrum = self.spectrum_original.copy()
+
+    def cheby1_filtration(self, channels):
+        # noinspection PyTupleAssignmentBalance
+        b, a = cheby1(self.filter_order, self.riple_factor, self.Wn, output='ba')
+        channels = filtfilt(b, a, channels)
+        return channels
 
     def start_music(self):
         tmp_channels = [self.channels[0][self.buffer_cnt * self.buffer_size:
